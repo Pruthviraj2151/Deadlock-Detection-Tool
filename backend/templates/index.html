@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deadlock Detection Tool</title>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+<link href="https://unpkg.com/vis-network/styles/vis-network.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+</head>
+
+<body>
+    <body> <link rel="stylesheet" href="styles.css"> <script src="script.js"></script> <div class="main-content"></div>
+        <body> <link rel="stylesheet" href="styles.css"> <script src="script.js"></script> <div class="main-content"></div>
+
+<div class="main-content">
+
+<h1>⚙️ Automated Deadlock Detection Tool ⚙️</h1>
+
+<button onclick="toggleMode()">🌙 Toggle Mode</button>
+
+<div class="card">
+<h2>Enter Process-Resource Dependencies</h2>
+
+<input id="process" placeholder="Process (e.g., P1)">
+
+<input id="resource" placeholder="Resource (e.g., R1)">
+<button onclick="addEdge()">Add Dependency</button>
+
+<h3>Dependency List</h3>
+<ul id="dependencyList"></ul>
+
+<div class="btn-row">
+<button onclick="detectDeadlock()">Detect Deadlock</button>
+
+<button onclick="predictAI()">AI Risk</button>
+<button onclick="runBanker()">Banker</button>
+<button onclick="autoSim()">Auto Sim</button>
+<button onclick="stopSim()">Stop Simulation</button>
+<button onclick="resetAll()">Reset</button>
+</div>
+
+<h2 id="result"></h2>
+<div id="loader" class="loader"></div>
+
+</div>
+
+<!-- GRAPH -->
+<div class="card">
+<h3>📊 Dependency Graph</h3>
+<div id="network"></div>
+</div>
+
+<!-- CHART -->
+<div class="card">
+<h3>📈 System Load Chart</h3>
+<canvas id="chart"></canvas>
+<p id="metrics"></p>
+</div>
+
+<!-- FEEDBACK -->
+<div class="card feedback-container">
+<h3>We'd love your feedback!</h3>
+<form id="feedbackForm">
+<input type="text" name="name" placeholder="Your Name" required>
+<input type="email" name="email" placeholder="Your Email" required>
+<textarea name="message" placeholder="Share your experience..." required></textarea>
+<button type="submit">Submit Feedback</button>
+</form>
+<p id="feedbackResponse"></p>
+</div>
+
+<!-- CREATORS -->
+<div class="card creators-section">
+<h2>Meet the Creators</h2>
+<div class="creator-profiles">
+
+<div class="creator">
+<img src="{{ url_for('static', filename='img/member1.png') }}">
+<h4>Manpreet Singh Sir</h4>
+<p>Faculty</p>
+</div>
+
+<div class="creator">
+<img src="{{ url_for('static', filename='img/member2.png') }}">
+<h4>Pruthviraj</h4>
+<p>Member 1</p>
+</div>
+
+<div class="creator">
+<img src="{{ url_for('static', filename='img/member3.png') }}">
+<h4>Member 2</h4>
+<p>Member 2</p>
+</div>
+
+<div class="creator">
+<img src="{{ url_for('static', filename='img/member4.png') }}">
+<h4>Member 3</h4>
+<p>Member 3</p>
+</div>
+
+</div>
+</div>
+
+</div>
+
+<div id="toast"></div>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+</body>
+</html>

@@ -1,0 +1,103 @@
+/* ---------------- Global ---------------- */
+body {
+    margin: 0;
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+    color: white;
+    text-align: center;
+    overflow-x: hidden;
+}
+
+.main-content {
+    position: relative;
+    z-index: 2;
+    padding: 20px;
+}
+/* LIGHT MODE FIX */
+.light-mode {
+    background: #f5f5f5 !important;
+    color: black !important;
+}
+
+.light-mode .card {
+    background: white !important;
+    color: black !important;
+}
+
+.light-mode input,
+.light-mode textarea {
+    background: #eee;
+    color: black;
+}
+
+.light-mode button {
+    background: #007bff;
+    color: white;
+}
+
+.card {
+    background: rgba(255,255,255,0.08);
+    border-radius: 15px;
+    padding: 20px;
+    margin: 20px auto;
+    max-width: 700px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+}
+
+/* Inputs & Buttons */
+input, button, textarea {
+    padding: 10px;
+    margin: 5px;
+    border-radius: 8px;
+    border: none;
+    outline: none;
+}
+
+button {
+    background: #ff7b00;
+    cursor: pointer;
+    transition: 0.3s;
+}
+button:hover {
+    transform: scale(1.1);
+}
+
+/* Graph */
+#network {
+    height: 400px;
+}
+
+/* Feedback Form */
+.feedback-container {
+    margin-top: 20px;
+    text-align: left;
+}
+.feedback-container input, .feedback-container textarea {
+    width: 100%;
+}
+
+/* Creators Section */
+.creator-profiles {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+}
+.creator {
+    text-align: center;
+    margin: 10px;
+}
+.creator img {
+    width: 120px;
+    border-radius: 50%;
+    border: 2px solid #ffc107;
+}
+.social-links i {
+    font-size: 20px;
+    margin: 0 5px;
+    color: #ffc107;
+    transition: 0.3s;
+}
+.social-links i:hover {
+    transform: scale(1.2);
+}
