@@ -72,6 +72,8 @@ def detect_deadlock():
         })
 
 # ================= AI SMART =================
+
+
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.json
@@ -131,6 +133,7 @@ def predict():
             }
         })
 
+# ================= BANKER =================
 # ================= BANKER =================
 @app.route('/banker', methods=['POST'])
 def banker():
