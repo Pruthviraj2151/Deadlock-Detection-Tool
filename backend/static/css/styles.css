@@ -12,6 +12,7 @@ body {
     position: relative;
     z-index: 2;
     padding: 20px;
+    margin: 2px;
 }
 /* LIGHT MODE FIX */
 .light-mode {
