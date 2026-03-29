@@ -2,7 +2,7 @@ let dependencies = [];
 let cycleNodes = [];
 let chart;
 let deadlockCount = 0;
-let simInterval = null;
+let network = null;
 
 console.log("Script Loaded ✅");
 
@@ -14,43 +14,55 @@ function showToast(msg){
     setTimeout(()=>t.style.display="none",2000);
 }
 
-// ================= STOP SIM =================
-function stopSim(){
-    clearInterval(simInterval);
-    simInterval = null;
-    showToast("Simulation Stopped ⛔");
-}
-
-// ================= START SIM =================
-function autoSim(){
-    if(simInterval) return;
-
-    simInterval = setInterval(()=>{
-        let p="P"+Math.floor(Math.random()*5);
-        let r="R"+Math.floor(Math.random()*5);
-
-        dependencies.push([p,r]);
-        document.getElementById("dependencyList").innerHTML += `<li>${p} → ${r}</li>`;
-
-        drawGraph();
-        updateChart();
-    },2000);
-
-    showToast("Simulation Started ▶️");
-}
-
 // ================= ADD EDGE =================
 function addEdge() {
     const process = document.getElementById("process").value.trim();
     const resource = document.getElementById("resource").value.trim();
+    const type = document.getElementById("type").value;
+
+    // 🔥 NEW LINE (instances)
+    const instances = parseInt(document.getElementById("instances").value) || 1;
 
     if (!process || !resource){
         showToast("Enter values ⚠️");
         return;
     }
 
-    dependencies.push([process, resource]);
-    document.getElementById("dependencyList").innerHTML += `<li>${process} → ${resource}</li>`;
+    // ✅ Prevent exact duplicate
+    let exists = dependencies.some(d => 
+        d.process === process && 
+        d.resource === resource && 
+        d.type === type
+    );
+
+    if(exists){
+        showToast("Already added ⚠️");
+        return;
+    }
+
+    // ✅ Correct validation fix
+    let invalid = dependencies.some(d =>
+        d.process === process &&
+        d.resource === resource &&
+        d.type === "assign" &&
+        type === "request"
+    );
+
+    if(invalid){
+        showToast("Invalid: Process already holding resource ⚠️");
+        return;
+    }
+
+    // 🔥 UPDATED PUSH (instances added)
+    dependencies.push({
+        process,
+        resource,
+        type,
+        instances
+    });
+
+    document.getElementById("dependencyList").innerHTML += 
+    `<li>${process} → ${resource} (${type}) [${instances}]</li>`;
 
     drawGraph();
     updateChart();
@@ -81,7 +93,7 @@ function detectDeadlock() {
     });
 }
 
-// ================= 🔥 SMART AI =================
+// ================= AI =================
 function predictAI() {
     fetch("/predict", {
         method: "POST",
@@ -91,36 +103,27 @@ function predictAI() {
     .then(res => res.json())
     .then(data => {
 
-        let solutionText = "";
-        data.solution.forEach(s => {
-            solutionText += "• " + s + "\n";
-        });
-
-        alert(`
-AI Deadlock Prediction
+        let message = `
+AI RESULT
 
 Risk: ${data.risk}
 
 ${data.message}
+`;
 
-Reason:
-${data.reason}
+        if(data.deadlock){
+            message += `\n❌ DEADLOCK DETECTED`;
+            message += `\n👉 Click BANKER to resolve`;
+        } else {
+            message += `\n✅ NO DEADLOCK`;
+        }
 
-Solution:
-${solutionText}
-
-Processes: ${data.metrics.processes}
-Resources: ${data.metrics.resources}
-Edges: ${data.metrics.edges}
-Density: ${data.metrics.density}
-        `);
+        alert(message);
 
         document.getElementById("metrics").innerText =
-        `Processes: ${data.metrics.processes}
-Resources: ${data.metrics.resources}
-Edges: ${data.metrics.edges}
-Density: ${data.metrics.density}
-Deadlocks: ${deadlockCount}`;
+        `Risk: ${data.risk}
+Deadlock: ${data.deadlock ? "YES" : "NO"}
+Dependencies: ${dependencies.length}`;
     })
     .catch(()=>{
         alert("AI prediction failed ❌");
@@ -140,7 +143,16 @@ function runBanker(){
     })
     .then(res => res.json())
     .then(data => {
-        alert(data.message);
+
+        if(data.sequence){
+            alert(`
+✅ SAFE SEQUENCE FOUND
+
+${data.sequence.join(" → ")}
+            `);
+        } else {
+            alert(data.message);
+        }
     })
     .catch(()=>{
         alert("Banker failed ❌");
@@ -149,10 +161,12 @@ function runBanker(){
 
 // ================= GRAPH =================
 function drawGraph() {
+
     const nodesSet = new Set();
-    dependencies.forEach(([f,t]) => {
-        nodesSet.add(f);
-        nodesSet.add(t);
+
+    dependencies.forEach(dep => {
+        nodesSet.add(dep.process);
+        nodesSet.add(dep.resource);
     });
 
     const visNodes = Array.from(nodesSet).map(id => ({
@@ -162,13 +176,16 @@ function drawGraph() {
         color: cycleNodes.includes(id) ? "red" : "#17a2b8"
     }));
 
-    const visEdges = dependencies.map(([f,t]) => ({
-        from:f,
-        to:t,
-        arrows:"to"
+    const visEdges = dependencies.map(dep => ({
+        from: dep.type === "assign" ? dep.resource : dep.process,
+        to: dep.type === "assign" ? dep.process : dep.resource,
+        arrows:"to",
+        color: dep.type === "assign" ? "green" : "orange"
     }));
 
-    new vis.Network(
+    if(network) network.destroy();
+
+    network = new vis.Network(
         document.getElementById("network"),
         {nodes:visNodes,edges:visEdges},
         {}
@@ -193,32 +210,6 @@ function updateChart(){
         }
     });
 }
-
-// ================= FEEDBACK =================
-document.addEventListener("DOMContentLoaded", function(){
-    const form = document.getElementById("feedbackForm");
-
-    if(form){
-        form.addEventListener("submit", function(e){
-            e.preventDefault();
-
-            const formData = new FormData(form);
-
-            fetch("https://formspree.io/f/manelney", {
-                method: "POST",
-                body: formData
-            })
-            .then(res=>{
-                if(res.ok){
-                    document.getElementById("feedbackResponse").innerText = "✅ Feedback submitted!";
-                    form.reset();
-                } else {
-                    document.getElementById("feedbackResponse").innerText = "❌ Failed";
-                }
-            });
-        });
-    }
-});
 
 // ================= DARK MODE =================
 function toggleMode(){

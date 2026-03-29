@@ -11,14 +11,10 @@
 
 <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-<script src="{{ url_for('static', filename='js/script.js') }}"></script>
 
 </head>
 
 <body>
-    <body> <link rel="stylesheet" href="styles.css"> <script src="script.js"></script> <div class="main-content"></div>
-        <body> <link rel="stylesheet" href="styles.css"> <script src="script.js"></script> <div class="main-content"></div>
 
 <div class="main-content">
 
@@ -30,8 +26,15 @@
 <h2>Enter Process-Resource Dependencies</h2>
 
 <input id="process" placeholder="Process (e.g., P1)">
-
 <input id="resource" placeholder="Resource (e.g., R1)">
+<input id="instances" placeholder="Instances (e.g., 2)">
+
+<!-- ✅ NEW TYPE OPTION -->
+<select id="type">
+    <option value="request">Request</option>
+    <option value="assign">Assign</option>
+</select>
+
 <button onclick="addEdge()">Add Dependency</button>
 
 <h3>Dependency List</h3>
@@ -39,11 +42,8 @@
 
 <div class="btn-row">
 <button onclick="detectDeadlock()">Detect Deadlock</button>
-
 <button onclick="predictAI()">AI Risk</button>
 <button onclick="runBanker()">Banker</button>
-<button onclick="autoSim()">Auto Sim</button>
-<button onclick="stopSim()">Stop Simulation</button>
 <button onclick="resetAll()">Reset</button>
 </div>
 
@@ -113,6 +113,7 @@
 
 <div id="toast"></div>
 
+<!-- ✅ JS only once -->
 <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 
 </body>

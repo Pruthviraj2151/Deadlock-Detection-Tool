@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-import networkx as nx
 import joblib
 import numpy as np
 
@@ -8,6 +7,7 @@ app = Flask(__name__)
 CORS(app)
 
 deadlock_count = 0
+
 
 # ================= AI MODEL =================
 try:
@@ -27,6 +27,67 @@ except:
     model.fit(X,y)
     joblib.dump(model,'model.pkl')
 
+
+# ================= 🔥 REAL DEADLOCK (MULTI-INSTANCE FIX) =================
+def check_deadlock_real(dependencies):
+
+    processes = list(set([d['process'] for d in dependencies]))
+    resources = list(set([d['resource'] for d in dependencies]))
+
+    p_index = {p:i for i,p in enumerate(processes)}
+    r_index = {r:i for i,r in enumerate(resources)}
+
+    n = len(processes)
+    m = len(resources)
+
+    allocation = [[0]*m for _ in range(n)]
+    request = [[0]*m for _ in range(n)]
+
+    # Build matrices
+    for dep in dependencies:
+        p = dep['process']
+        r = dep['resource']
+        t = dep['type']
+
+        if t == "assign":
+            allocation[p_index[p]][r_index[r]] += 1
+        else:
+            request[p_index[p]][r_index[r]] += 1
+
+    # 🔥 MULTI-INSTANCE SUPPORT (ONLY CHANGE)
+    available = [0]*m
+
+    for dep in dependencies:
+        r = dep['resource']
+        inst = dep.get('instances', 1)
+        available[r_index[r]] = max(available[r_index[r]], inst)
+
+    # Subtract allocated resources
+    for i in range(n):
+        for j in range(m):
+            available[j] -= allocation[i][j]
+
+    finish = [False]*n
+
+    while True:
+        found = False
+
+        for i in range(n):
+            if not finish[i] and all(request[i][j] <= available[j] for j in range(m)):
+                for j in range(m):
+                    available[j] += allocation[i][j]
+                finish[i] = True
+                found = True
+
+        if not found:
+            break
+
+    if all(finish):
+        return False, []   # SAFE
+    else:
+        return True, []    # DEADLOCK
+
+
 # ================= DEADLOCK =================
 @app.route('/detect_deadlock', methods=['POST'])
 def detect_deadlock():
@@ -42,38 +103,24 @@ def detect_deadlock():
             'count': deadlock_count
         })
 
-    G = nx.DiGraph()
-    owner = {}
+    has_deadlock, nodes = check_deadlock_real(dependencies)
 
-    for p,r in dependencies:
-        if r not in owner:
-            owner[r] = p
-            G.add_edge(r,p)
-        else:
-            G.add_edge(p,r)
-
-    try:
-        cycle = nx.find_cycle(G)
-        nodes = [i[0] for i in cycle]
-
+    if has_deadlock:
         deadlock_count += 1
-
         return jsonify({
             'message': '❌ Deadlock Detected',
             'nodes': nodes,
             'count': deadlock_count
         })
-
-    except nx.NetworkXNoCycle:
+    else:
         return jsonify({
             'message': '✅ Safe System',
             'nodes': [],
             'count': deadlock_count
         })
 
-# ================= AI SMART =================
 
-
+# ================= 🔥 AI SMART =================
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.json
@@ -82,58 +129,46 @@ def predict():
     if not deps:
         return jsonify({
             'risk': 'LOW',
-            'message': 'System is empty and safe',
-            'reason': 'No dependencies present',
-            'solution': ['No action needed'],
-            'metrics': {
-                'processes': 0,
-                'resources': 0,
-                'edges': 0,
-                'density': 0
-            }
+            'deadlock': False,
+            'message': 'System is empty and safe'
         })
 
-    processes = len(set([p for p,_ in deps]))
-    resources = len(set([r for _,r in deps]))
-    edges = len(deps)
+    has_deadlock, _ = check_deadlock_real(deps)
 
+    processes = len(set([d['process'] for d in deps]))
+    resources = len(set([d['resource'] for d in deps]))
+    edges = len(deps)
     density = edges / (processes + resources + 1)
 
     pred = model.predict([[processes, resources, edges, density]])[0]
 
-    if pred == 1:
+    if has_deadlock:
         return jsonify({
             'risk': 'HIGH',
-            'message': '⚠️ Deadlock may occur soon!',
-            'reason': 'High dependency density & circular wait possible',
+            'deadlock': True,
+            'message': '❌ Deadlock WILL occur (unsafe state)',
             'solution': [
-                'Apply Banker’s Algorithm',
-                'Reduce resource sharing',
-                'Avoid circular wait',
-                'Increase available resources'
-            ],
-            'metrics': {
-                'processes': processes,
-                'resources': resources,
-                'edges': edges,
-                'density': round(density,2)
-            }
+                'Run Banker Algorithm',
+                'Kill a process',
+                'Release resources'
+            ]
         })
+
+    elif pred == 1:
+        return jsonify({
+            'risk': 'MEDIUM',
+            'deadlock': False,
+            'message': '⚠️ Risky system (may lead to deadlock)'
+        })
+
     else:
         return jsonify({
             'risk': 'LOW',
-            'message': '✅ System is safe',
-            'reason': 'Low dependency and no circular wait',
-            'solution': ['No action required'],
-            'metrics': {
-                'processes': processes,
-                'resources': resources,
-                'edges': edges,
-                'density': round(density,2)
-            }
+            'deadlock': False,
+            'message': '✅ System is safe'
         })
 
-# ================= BANKER =================
+
 # ================= BANKER =================
 @app.route('/banker', methods=['POST'])
 def banker():
@@ -156,30 +191,32 @@ def banker():
     work = available[:]
 
     while len(safe_seq) < n:
-        allocated = False
+        allocated_flag = False
 
         for i in range(n):
             if not finish[i] and all(need[i][j] <= work[j] for j in range(m)):
-
                 for j in range(m):
                     work[j] += allocation[i][j]
 
                 safe_seq.append(f"P{i}")
                 finish[i] = True
-                allocated = True
+                allocated_flag = True
 
-        if not allocated:
-            return jsonify({'message': '❌ Unsafe State (Deadlock Possible)'})
+        if not allocated_flag:
+            return jsonify({'message': '❌ Unsafe State (Deadlock Cannot be Resolved)'})
 
     return jsonify({
         'message': '✅ Safe Sequence Found',
         'sequence': safe_seq
     })
 
+
 # ================= HOME =================
 @app.route('/')
 def home():
     return render_template('index.html')
 
+
+# ================= RUN =================
 if __name__ == '__main__':
     app.run(debug=True)
