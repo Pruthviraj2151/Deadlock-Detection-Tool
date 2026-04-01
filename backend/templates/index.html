@@ -29,20 +29,31 @@
 <input id="resource" placeholder="Resource (e.g., R1)">
 <input id="instances" placeholder="Instances (e.g., 2)">
 
-<!-- ✅ NEW TYPE OPTION -->
 <select id="type">
     <option value="request">Request</option>
     <option value="assign">Assign</option>
 </select>
 
-<button onclick="addEdge()">Add Dependency</button>
+<!-- ✅ ONLY ADD BUTTON -->
+<button id="addBtn" onclick="addEdge()">Add Dependency</button>
+
+<!-- 🔥 POPUP (AB YAHA ADD KIYA — CARD KE ANDAR) -->
+<div id="popup" class="popup">
+  <div class="popup-content">
+    <h3 id="popupMessage"></h3>
+    <div id="suggestions"></div>
+
+    <button onclick="confirmAdd()">Continue ⚠️</button>
+    <button onclick="closePopup()">Cancel</button>
+  </div>
+</div>
 
 <h3>Dependency List</h3>
 <ul id="dependencyList"></ul>
 
 <div class="btn-row">
 <button onclick="detectDeadlock()">Detect Deadlock</button>
-<button onclick="predictAI()">AI Risk</button>
+<!-- <button onclick="predictAI()">AI Risk</button> -->
 <button onclick="runBanker()">Banker</button>
 <button onclick="resetAll()">Reset</button>
 </div>
@@ -113,7 +124,6 @@
 
 <div id="toast"></div>
 
-<!-- ✅ JS only once -->
 <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 
 </body>

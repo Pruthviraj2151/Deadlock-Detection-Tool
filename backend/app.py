@@ -8,7 +8,6 @@ CORS(app)
 
 deadlock_count = 0
 
-
 # ================= AI MODEL =================
 try:
     model = joblib.load('model.pkl')
@@ -28,7 +27,7 @@ except:
     joblib.dump(model,'model.pkl')
 
 
-# ================= 🔥 REAL DEADLOCK (MULTI-INSTANCE FIX) =================
+# ================= DEADLOCK LOGIC =================
 def check_deadlock_real(dependencies):
 
     processes = list(set([d['process'] for d in dependencies]))
@@ -43,26 +42,31 @@ def check_deadlock_real(dependencies):
     allocation = [[0]*m for _ in range(n)]
     request = [[0]*m for _ in range(n)]
 
-    # Build matrices
     for dep in dependencies:
         p = dep['process']
         r = dep['resource']
         t = dep['type']
+        inst = dep.get('instances', 1)
 
         if t == "assign":
-            allocation[p_index[p]][r_index[r]] += 1
+            allocation[p_index[p]][r_index[r]] += inst
         else:
-            request[p_index[p]][r_index[r]] += 1
+            request[p_index[p]][r_index[r]] += inst
 
-    # 🔥 MULTI-INSTANCE SUPPORT (ONLY CHANGE)
-    available = [0]*m
-
+    resource_total = {}
     for dep in dependencies:
-        r = dep['resource']
-        inst = dep.get('instances', 1)
-        available[r_index[r]] = max(available[r_index[r]], inst)
+        if dep['type'] == "assign":
+            r = dep['resource']
+            inst = dep.get('instances', 1)
 
-    # Subtract allocated resources
+            if r not in resource_total:
+                resource_total[r] = inst
+            else:
+                resource_total[r] += inst
+
+    total_instances = [resource_total.get(r, 0) for r in resources]
+
+    available = total_instances[:]
     for i in range(n):
         for j in range(m):
             available[j] -= allocation[i][j]
@@ -82,13 +86,134 @@ def check_deadlock_real(dependencies):
         if not found:
             break
 
-    if all(finish):
-        return False, []   # SAFE
+    deadlocked_processes = [processes[i] for i in range(n) if not finish[i]]
+
+    if len(deadlocked_processes) == 0:
+        return False, []
+
+    if len(deadlocked_processes) == n:
+        return True, deadlocked_processes
+
+    return False, []
+
+
+# ================= 🔥 FIXED ROUTE =================
+@app.route('/check_safe_add', methods=['POST'])
+def check_safe_add():
+    data = request.json
+    dependencies = data.get('dependencies', [])
+
+    has_deadlock, _ = check_deadlock_real(dependencies)
+
+    if has_deadlock:
+
+        all_resources = list(set(d["resource"] for d in dependencies))
+
+        try_suggestions = []
+        remove_suggestions = []
+
+        last = dependencies[-1]
+        process = last["process"]
+        current_resource = last["resource"]
+        type_ = last["type"]
+        instances = last.get("instances", 1)
+
+        # 🔥 TRY CHANGE RESOURCE
+        for r in all_resources:
+            if r == current_resource:
+                continue
+
+            temp = dependencies.copy()
+            temp[-1] = {
+                "process": process,
+                "resource": r,
+                "type": type_,
+                "instances": instances
+            }
+
+            deadlock, _ = check_deadlock_real(temp)
+
+            if not deadlock:
+                try_suggestions.append(f"Try {process} → {r}")
+
+        # 🔥 TRY REMOVE EDGE
+        for dep in dependencies:
+            temp = dependencies.copy()
+            temp.remove(dep)
+
+            deadlock, _ = check_deadlock_real(temp)
+
+            if not deadlock:
+                remove_suggestions.append(f"Remove {dep['process']} → {dep['resource']}")
+
+        # 🔥 FINAL COMBINE (YOUR FIX)
+        suggestions = []
+
+        if try_suggestions:
+            suggestions.append(try_suggestions[0])
+
+        if remove_suggestions:
+            suggestions.append(remove_suggestions[0])
+
+        if not suggestions:
+            suggestions = ["Reduce instances", "Release some resources"]
+
+        return jsonify({
+            "safe": False,
+            "message": "⚠️ Adding this may cause DEADLOCK",
+            "suggestion": suggestions
+        })
+
     else:
-        return True, []    # DEADLOCK
+        return jsonify({
+            "safe": True,
+            "message": "✅ Safe to add"
+        })
 
 
-# ================= DEADLOCK =================
+# ================= REASON =================
+def get_deadlock_reason(dependencies):
+    reasons = []
+
+    processes = set(d['process'] for d in dependencies)
+
+    for p in processes:
+        has_assign = any(d['process']==p and d['type']=="assign" for d in dependencies)
+        has_request = any(d['process']==p and d['type']=="request" for d in dependencies)
+        if has_assign and has_request:
+            reasons.append("Hold and Wait")
+            break
+
+    resource_used = {}
+    for d in dependencies:
+        if d['type']=="assign":
+            r = d['resource']
+            resource_used[r] = resource_used.get(r,0)+1
+
+    if any(v >= 1 for v in resource_used.values()):
+        reasons.append("Mutual Exclusion")
+
+    reasons.append("No Preemption")
+
+    import networkx as nx
+    G = nx.DiGraph()
+
+    for d in dependencies:
+        if d['type'] == "assign":
+            G.add_edge(d['resource'], d['process'])
+        else:
+            G.add_edge(d['process'], d['resource'])
+
+    try:
+        nx.find_cycle(G)
+        reasons.append("Circular Wait")
+    except:
+        pass
+
+    return reasons
+
+
+# ================= ROUTES =================
 @app.route('/detect_deadlock', methods=['POST'])
 def detect_deadlock():
     global deadlock_count
@@ -107,20 +232,23 @@ def detect_deadlock():
 
     if has_deadlock:
         deadlock_count += 1
+
         return jsonify({
             'message': '❌ Deadlock Detected',
             'nodes': nodes,
-            'count': deadlock_count
+            'count': deadlock_count,
+            'reason': get_deadlock_reason(dependencies)
         })
+
     else:
         return jsonify({
             'message': '✅ Safe System',
             'nodes': [],
-            'count': deadlock_count
+            'count': deadlock_count,
+            'reason': get_deadlock_reason(dependencies)
         })
 
 
-# ================= 🔥 AI SMART =================
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.json
@@ -146,43 +274,73 @@ def predict():
         return jsonify({
             'risk': 'HIGH',
             'deadlock': True,
-            'message': '❌ Deadlock WILL occur (unsafe state)',
-            'solution': [
-                'Run Banker Algorithm',
-                'Kill a process',
-                'Release resources'
-            ]
+            'message': '❌ Deadlock WILL occur'
         })
 
     elif pred == 1:
         return jsonify({
             'risk': 'MEDIUM',
             'deadlock': False,
-            'message': '⚠️ Risky system (may lead to deadlock)'
+            'message': '⚠️ Risky system'
         })
 
     else:
         return jsonify({
             'risk': 'LOW',
             'deadlock': False,
-            'message': '✅ System is safe'
+            'message': '✅ Safe system'
         })
 
 
-# ================= BANKER =================
 @app.route('/banker', methods=['POST'])
 def banker():
     data = request.json
+    deps = data.get('dependencies', [])
 
-    allocation = data.get('allocation')
-    max_need = data.get('max')
-    available = data.get('available')
+    if not deps:
+        return jsonify({'message': '⚠️ No data'})
 
-    if not allocation or not max_need or not available:
-        return jsonify({'message': '⚠️ Missing data for Banker'})
+    processes = list(set([d['process'] for d in deps]))
+    resources = list(set([d['resource'] for d in deps]))
 
-    n = len(allocation)
-    m = len(available)
+    p_index = {p:i for i,p in enumerate(processes)}
+    r_index = {r:i for i,r in enumerate(resources)}
+
+    n = len(processes)
+    m = len(resources)
+
+    allocation = [[0]*m for _ in range(n)]
+    max_need = [[0]*m for _ in range(n)]
+
+    resource_total = {}
+
+    for dep in deps:
+        p = dep['process']
+        r = dep['resource']
+        t = dep['type']
+        inst = dep.get('instances',1)
+
+        if t == "assign":
+            allocation[p_index[p]][r_index[r]] += inst
+
+            if r not in resource_total:
+                resource_total[r] = inst
+            else:
+                resource_total[r] += inst
+
+        if t == "request":
+            max_need[p_index[p]][r_index[r]] += inst
+
+    for i in range(n):
+        for j in range(m):
+            max_need[i][j] += allocation[i][j]
+
+    total_instances = [resource_total.get(r,0) for r in resources]
+
+    available = total_instances[:]
+    for i in range(n):
+        for j in range(m):
+            available[j] -= allocation[i][j]
 
     need = [[max_need[i][j] - allocation[i][j] for j in range(m)] for i in range(n)]
 
@@ -191,19 +349,28 @@ def banker():
     work = available[:]
 
     while len(safe_seq) < n:
-        allocated_flag = False
+        found = False
 
         for i in range(n):
             if not finish[i] and all(need[i][j] <= work[j] for j in range(m)):
                 for j in range(m):
                     work[j] += allocation[i][j]
 
-                safe_seq.append(f"P{i}")
+                safe_seq.append(processes[i])
                 finish[i] = True
-                allocated_flag = True
+                found = True
 
-        if not allocated_flag:
-            return jsonify({'message': '❌ Unsafe State (Deadlock Cannot be Resolved)'})
+        if not found:
+            problem_process = processes[0] if processes else "P0"
+
+            return jsonify({
+                'message': '❌ Unsafe State',
+                'solution': [
+                    f'Kill process {problem_process}',
+                    'Release its resources',
+                    'Re-run Banker Algorithm'
+                ]
+            })
 
     return jsonify({
         'message': '✅ Safe Sequence Found',
@@ -211,12 +378,10 @@ def banker():
     })
 
 
-# ================= HOME =================
 @app.route('/')
 def home():
     return render_template('index.html')
 
 
-# ================= RUN =================
 if __name__ == '__main__':
     app.run(debug=True)
