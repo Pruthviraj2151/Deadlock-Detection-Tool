@@ -195,6 +195,7 @@ canvas {
 }
 
 /* ---------------- LOADER ---------------- */
+/* update */
 .loader {
     display: none;
     margin: 10px auto;

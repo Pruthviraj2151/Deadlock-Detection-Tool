@@ -322,3 +322,4 @@ function toggleMode(){
 function resetAll(){
     location.reload();
 }
+// updated
